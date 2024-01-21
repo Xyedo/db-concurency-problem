@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  pg-dev:
+    image: postgres
+    ports:
+      - "${PG_PORT}:5432"
+    restart: on-failure
+    environment:
+      - TZ=Asia/Jakarta
+      - POSTGRES_USER=${PG_USER}
+      - POSTGRES_PASSWORD=${PG_PASSWORD}
+      - POSTGRES_DB=${PG_DB}
