@@ -9,11 +9,11 @@ import (
 	"github.com/joho/godotenv"
 )
 
-var 
-(
-	cfg config
+var (
+	cfg  config
 	once sync.Once
 )
+
 type config struct {
 	Postgre struct {
 		Host     string
@@ -24,8 +24,8 @@ type config struct {
 	}
 }
 
-func load() {
-	err := godotenv.Load()
+func load(filenames ...string) {
+	err := godotenv.Load(filenames...)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -43,7 +43,10 @@ func load() {
 
 }
 
-func Get() config {
-	once.Do(load)
+func Get(filenames ...string) config {
+	if cfg == (config{}) {
+		once.Do(func() { load(filenames...) })
+	}
+
 	return cfg
 }

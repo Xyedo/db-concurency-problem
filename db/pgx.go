@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"runtime"
@@ -61,7 +62,7 @@ func GetConnection(ctx context.Context) (*pgxpool.Conn, error) {
 	return pool.Acquire(ctx)
 }
 
-func Transaction(ctx context.Context, txOpt pgx.TxOptions, cb func(tx Connection) error) error {
+func Atomic(ctx context.Context, txOpt pgx.TxOptions, cb func(tx Connection) error) error {
 	conn, err := GetConnection(ctx)
 	if err != nil {
 		return err
@@ -83,4 +84,83 @@ func Transaction(ctx context.Context, txOpt pgx.TxOptions, cb func(tx Connection
 	}
 
 	return tx.Commit(ctx)
+}
+
+var ErrVersionMisMatch = errors.New("version mismacth, must retry")
+
+const maxRetry = 5
+
+func AtomicWithAutoRetry(ctx context.Context, txOpt pgx.TxOptions, cb func(tx Connection) error) error {
+	return transaction(ctx, txOpt, cb, maxRetry)
+}
+
+func RetryMatchAndSet(ctx context.Context, cb func(conn Connection) error) error {
+	conn, err := GetConnection(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+
+	var errToTry error
+
+	retryCount := 0
+	for retryCount < maxRetry {
+		errToTry = cb(conn)
+		if errToTry != nil && !errors.Is(errToTry, ErrVersionMisMatch) {
+			return errToTry
+		}
+
+		retryCount++
+	}
+
+	if retryCount == maxRetry {
+		return ErrLimitRetry
+	}
+
+	return nil
+}
+
+var ErrLimitRetry = errors.New("retry limit exceeded!")
+
+func transaction(ctx context.Context, txOpt pgx.TxOptions, cb func(tx Connection) error, retry int) error {
+	if retry < 0 {
+		return ErrLimitRetry
+	}
+
+	conn, err := GetConnection(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+
+	tx, err := conn.BeginTx(ctx, txOpt)
+	if err != nil {
+		return err
+	}
+
+	err = cb(tx)
+	if err != nil {
+		if rbErr := tx.Rollback(ctx); rbErr != nil {
+			return fmt.Errorf("cannot rollback %w: %w", rbErr, err)
+		}
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "40001" {
+			return transaction(ctx, txOpt, cb, retry-1)
+
+		}
+		return err
+
+	}
+
+	err = tx.Commit(ctx)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "40001" {
+			return transaction(ctx, txOpt, cb, retry-1)
+		}
+
+		return err
+	}
+
+	return nil
 }

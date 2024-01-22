@@ -11,3 +11,20 @@ services:
       - POSTGRES_USER=${PG_USER}
       - POSTGRES_PASSWORD=${PG_PASSWORD}
       - POSTGRES_DB=${PG_DB}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 0.5s
+      timeout: 10s
+      retries: 10
+
+  migrate:
+    image: migrate/migrate
+    restart: on-failure
+    depends_on:
+      pg-dev:
+        condition: service_healthy
+    links:
+      - pg-dev
+    volumes:
+      - ./db/migrations:/migrations
+    command: ["-path", "/migrations", "-database" , "postgresql://${PG_USER}:${PG_PASSWORD}@pg-dev/${PG_DB}?sslmode=disable", "up"]

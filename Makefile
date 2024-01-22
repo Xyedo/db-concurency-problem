@@ -23,3 +23,11 @@ up:
 .PHONY: down
 down: 
 	docker compose --env-file ./.env down 
+
+.PHONY: bench-isolation-level
+bench-isolation-level:
+	go test -benchmem -bench . ./isolation-level-benchmark -benchtime 1s
+
+bench-lost-update:
+	go clean -testcache
+	go test -v -timeout 10s github.com/xyedo/db-concurency-problem/lost-update-benchmark
