@@ -18,15 +18,15 @@ func TestInsertNewFakeTable(t *testing.T) {
 		txOpt pgx.TxOptions
 	}{
 		{
-			name:  "duplicate numbering on default / read commited",
+			name:  "no error but duplicate numbering on default / read commited",
 			txOpt: pgx.TxOptions{},
 		},
 		{
-			name:  "duplicate numbering in repeatable read",
+			name:  "mo error but duplicate numbering in repeatable read",
 			txOpt: pgx.TxOptions{IsoLevel: pgx.RepeatableRead},
 		},
 		{
-			name:  "no error when in serializable",
+			name:  "no error and sequential numbering when in serializable",
 			txOpt: pgx.TxOptions{IsoLevel: pgx.Serializable},
 		},
 	}
@@ -51,6 +51,7 @@ func TestInsertNewFakeTable(t *testing.T) {
 			}
 			s, err := helper.SelectFakeTable(context.Background())
 			assert.NoError(t, err)
+
 			assert.Equal(t, []string{"ft-001", "ft-002", "ft-003", "ft-004", "ft-005", "ft-006", "ft-007", "ft-008", "ft-009"}, s)
 
 			err = helper.DeleteFakeTable(context.Background())
